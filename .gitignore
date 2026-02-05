@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# Ignore uploaded PDFs
+backend/app/storage/uploads/*.pdf
+
+# Ignore generated Word outputs
+backend/app/storage/outputs/*.docx
+
