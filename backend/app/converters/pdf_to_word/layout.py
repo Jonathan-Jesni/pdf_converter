@@ -6,6 +6,7 @@ import os
 LINE_Y_THRESHOLD = 2
 MIN_TEXT_CHARS = 30
 TAB_WIDTH = 40
+COLUMN_GAP_THRESHOLD = 100
 
 
 def is_meaningful_text(words, min_chars=MIN_TEXT_CHARS):
@@ -40,6 +41,59 @@ def group_words_into_lines(words):
     return lines
 
 
+def split_into_columns(words):
+    words = sorted(words, key=lambda w: w["x0"])
+    columns = []
+    current = [words[0]]
+
+    for w in words[1:]:
+        if abs(w["x0"] - current[-1]["x0"]) > COLUMN_GAP_THRESHOLD:
+            columns.append(current)
+            current = [w]
+        else:
+            current.append(w)
+
+    columns.append(current)
+    return columns
+
+
+def render_column(doc, words):
+    lines = group_words_into_lines(words)
+    left_margin = min(w["x0"] for w in words)
+
+    for line in lines:
+        text = " ".join(w["text"] for w in line).strip()
+        if not text:
+            continue
+
+        x0 = line[0]["x0"]
+        indent = int((x0 - left_margin) / TAB_WIDTH)
+        indent = max(0, indent)
+
+        doc.add_paragraph("\t" * indent + text)
+
+def extract_page_images(page):
+    images = []
+
+    for img in page.images:
+        try:
+            bbox = (
+                img["x0"],
+                img["top"],
+                img["x1"],
+                img["bottom"]
+            )
+            cropped = page.crop(bbox).to_image(resolution=300).original
+            buf = io.BytesIO()
+            cropped.save(buf, format="PNG")
+            buf.seek(0)
+            images.append(buf)
+        except Exception:
+            continue
+
+    return images
+
+
 def pdf_to_word_layout(input_pdf_path, output_docx_path):
     doc = Document()
     os.makedirs(os.path.dirname(output_docx_path), exist_ok=True)
@@ -48,7 +102,7 @@ def pdf_to_word_layout(input_pdf_path, output_docx_path):
         for page in pdf.pages:
             words = page.extract_words(use_text_flow=True)
 
-            # Fallback for scanned / image-only pages
+            # Scanned / image-only fallback
             if not words or not is_meaningful_text(words):
                 img = page.to_image(resolution=300).original
                 buf = io.BytesIO()
@@ -58,21 +112,18 @@ def pdf_to_word_layout(input_pdf_path, output_docx_path):
                 doc.add_page_break()
                 continue
 
-            lines = group_words_into_lines(words)
-            left_margin = min(w["x0"] for w in words)
+            columns = split_into_columns(words)
 
-            for line in lines:
-                text = " ".join(w["text"] for w in line).strip()
-                if not text:
-                    continue
+            for col_words in columns:
+                render_column(doc, col_words)
 
-                x0 = line[0]["x0"]
-                indent = int((x0 - left_margin) / TAB_WIDTH)
-                indent = max(0, indent)
-
-                doc.add_paragraph("\t" * indent + text)
+            # ADD embedded images AFTER text
+            images = extract_page_images(page)
+            for img_buf in images:
+                add_full_width_image(doc, img_buf)
 
             doc.add_page_break()
+
 
     doc.save(output_docx_path)
 
