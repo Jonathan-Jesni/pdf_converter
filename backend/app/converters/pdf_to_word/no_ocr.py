@@ -1,5 +1,6 @@
 import pdfplumber
 from docx import Document
+from .layout import pdf_to_word_layout
 import io
 import os
 
@@ -98,6 +99,11 @@ def pair_form_rows(left_lines, right_lines):
 
 
 def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
+    # 🔹 LAYOUT MODE DISPATCH
+    if mode == "layout":
+        pdf_to_word_layout(input_pdf_path, output_docx_path)
+        return
+
     doc = Document()
     os.makedirs(os.path.dirname(output_docx_path), exist_ok=True)
 
@@ -129,7 +135,7 @@ def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
                     doc.add_page_break()
                     continue
 
-            # SEMANTIC MODE (default fallback)
+            # SEMANTIC MODE
             font_sizes = [w["size"] for w in words if "size" in w]
             avg_size = sum(font_sizes) / len(font_sizes) if font_sizes else 10
 
@@ -173,8 +179,8 @@ def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
 
 if __name__ == "__main__":
     pdf_to_word_no_ocr(
-        "app/storage/uploads/input.pdf",
-        "app/storage/outputs/output.docx",
-        mode="semantic" 
+        "backend/app/storage/uploads/input.pdf",
+        "backend/app/storage/outputs/output_layout.docx",
+        mode="layout"
     )
-    print("Conversion finished")
+    print("Layout mode test finished")
