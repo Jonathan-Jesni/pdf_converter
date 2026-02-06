@@ -1,47 +1,53 @@
-# 📄 PDF to Word Converter (No OCR) — v1.0
+# 📄 PDF to Word Converter (No OCR) — v1.1
 
-A deterministic PDF → Word (.docx) converter that preserves editable text, handles structured forms, and gracefully falls back to images for scanned PDFs, without using OCR.
+A deterministic PDF → Word (.docx) conversion engine that preserves editable text, handles structured forms, and safely falls back to images for scanned PDFs — without using OCR.
+
+The system prioritizes correctness, safety, and explainability over pixel-perfect layout replication.
 
 ---
 
 ## 🎯 Project Goal
 
-Convert any PDF into a Word document such that:
+Convert PDFs into Word documents such that:
 
-* **Selectable text stays editable**
-* **Scanned / handwritten content becomes images**
-* **No OCR is used**
-* **Nothing is silently dropped**
-* **Behavior is predictable and explainable**
+* **Selectable text remains editable**
+* **Scanned or handwritten pages are embedded as images**
+* **OCR is explicitly disabled**
+* **No content is silently dropped**
+* **All behavior is deterministic and explainable**
 
-This project focuses on **semantic correctness and safety**, not pixel-perfect visual replication.
+This project focuses on **semantic correctness**, not visual imitation.
 
 ---
 
-## ✨ Features (v1.0)
+## ✨ Features (v1.1)
 
 ### ✅ Text-based PDFs
 * Extracts real text into editable Word paragraphs.
 * Detects headings using font-size heuristics.
-* Preserves reading order.
+* Preserves logical reading order.
 
-### ✅ Form-aware conversion (`form_mode`)
-* Converts two-column forms into clean Word tables.
+### ✅ Layout-preserving conversion (`mode="layout"`)
+* Column-aware reading for multi-column PDFs.
+* Prevents left/right text interleaving.
+* Safely handles mixed text and embedded images.
+* Preserves editability without semantic guessing.
+
+### ✅ Form-aware conversion (`mode="form"`)
+* Converts clean two-column forms into Word tables.
 * Row-wise label–value pairing using vertical alignment.
-* Ideal for receipts, challans, marksheets, and applications.
+* Suitable for receipts, challans, marksheets, and applications.
 
 ### ✅ Scanned / handwritten PDFs
 * Automatically detected.
 * Entire page rendered as an image.
 * Inserted into Word without OCR.
 
-### ✅ Multi-column documents
-* Column-aware text processing in semantic mode.
-* Prevents left/right column text interleaving.
-
 ### ❌ OCR (intentionally disabled)
 * No text recognition from images.
-* Guarantees no hallucinated or incorrect text.
+* Guarantees zero hallucinated or incorrect text.
+
+> **v1.1** introduces layout-preserving conversion and a command-line interface while maintaining deterministic, no-OCR behavior.
 
 ---
 
@@ -50,117 +56,152 @@ This project focuses on **semantic correctness and safety**, not pixel-perfect v
 **Structure over appearance.**
 
 The system prioritizes:
-1.  Editability
-2.  Semantic meaning
-3.  Deterministic behavior
+1. Editability
+2. Semantic meaning
+3. Deterministic behavior
 
 Over:
-1.  Pixel-perfect layout
-2.  Exact visual cloning
+1. Pixel-perfect layout cloning
+2. Unsafe inference or guessing
 
-This mirrors how professional document tools are designed internally.
+This mirrors how professional document-processing systems are designed internally.
 
 ---
 
 ## 🏗️ Architecture Overview
 
-    PDF
-     ↓
-    Page-by-page processing
-     ↓
-    Detect page type:
-       ├─ Text-based
-       ├─ Form-like
-       └─ Scanned / image-only
-     ↓
-    Mode-specific processing:
-       ├─ semantic mode → paragraphs & headings
-       └─ form mode → row-wise tables
-     ↓
-    Word (.docx) output
+```text
+PDF
+ ↓
+Page-by-page processing
+ ↓
+Detect page type:
+   ├─ Text-based
+   ├─ Form-like
+   └─ Scanned / image-only
+ ↓
+Mode-specific processing:
+   ├─ semantic mode → paragraphs & headings
+   ├─ layout mode → column-aware visual order
+   └─ form mode → row-wise tables
+ ↓
+Word (.docx) output
+```
 
 ---
 
 ## 🔧 Conversion Modes
 
 ### 1️⃣ Semantic Mode (default)
-**Best for:** essays, reports, articles, academic papers.
+**Best for:** essays, reports, articles, academic PDFs.
 
 **Behavior:**
-* Preserves text flow
-* Supports multi-column reading order
-* No tables unless explicitly detected
+* Preserves logical reading order
+* Outputs clean, editable paragraphs
+* Avoids forcing tables or layout assumptions
 
-    mode="semantic"
+```python
+mode="semantic"
+```
 
-### 2️⃣ Form Mode
+### 2️⃣ Layout Mode
+**Best for:** multi-column documents, reports with images, visually structured PDFs.
+
+**Behavior:**
+* Column-aware reading order
+* Preserves visual structure safely
+* Extracts embedded images on text pages
+* No semantic guessing
+
+```python
+mode="layout"
+```
+
+### 3️⃣ Form Mode
 **Best for:** receipts, challans, marksheets, structured forms.
 
 **Behavior:**
-* Detects two-column layouts
+* Detects true two-column layouts
 * Pairs labels and values row-wise
 * Outputs a single clean Word table
 
-    mode="form"
+```python
+mode="form"
+```
 
 ---
 
-## 🧪 Test Coverage (v1.0)
+## 🧪 Test Coverage (v1.1)
 
 | Test | Description | Result |
 | :--- | :--- | :--- |
-| **Test 1** | Simple two-column form | ✅ Pass |
-| **Test 2** | Misaligned rows | ⚠️ Conditional (geometry-dependent) |
-| **Test 3** | Normal essay | ✅ Pass |
+| **Test 1** | Two-column document | ✅ Pass |
+| **Test 2** | Lists & indentation | ✅ Pass |
+| **Test 3** | Mixed text + image | ✅ Pass |
 | **Test 4** | Scanned / handwritten PDF | ✅ Pass |
+| **Test 5** | Long paragraph wrapping | ✅ Pass |
 
-*All failures are documented boundaries, not bugs.*
+*All limitations are documented boundaries, not bugs.*
 
 ---
 
-## ⚠️ Known Limitations (by design)
+## ⚠️ Known Limitations (By Design)
 
-* **Multi-pair rows on the same line** (e.g. `Label : Value  Label : Value`) are not split yet.
 * **Inline label–value pairs** without clear column separation fall back to semantic mode.
-* **No pixel-perfect layout replication.**
-* **No OCR.**
+* **Multi-pair rows** on the same line are not split.
+* **Pixel-perfect layout replication** is not attempted.
+* **OCR** is deliberately excluded.
 
-These are explicitly not handled in v1.0 to avoid unsafe guessing.
+These constraints exist to avoid unsafe guessing or silent corruption.
 
 ---
 
 ## 🛠️ Tech Stack
 
 * **Python**
-* **pdfplumber** — PDF text & geometry inspection
+* **pdfplumber** — PDF text and geometry inspection
 * **python-docx** — Word document generation
 
 ---
 
-## ▶️ How to Run
+## ▶️ How to Run (CLI)
 
-Run the script from the root directory:
+Run all commands from the project root.
 
-    python app/converters/pdf_to_word/no_ocr.py
+### Semantic mode (default)
+```bash
+python -m backend.app.cli \
+  --input backend/app/storage/uploads/input.pdf \
+  --output backend/app/storage/outputs/output_semantic.docx
+```
 
-Update input/output paths inside the file:
+### Layout mode
+```bash
+python -m backend.app.cli \
+  --input backend/app/storage/uploads/input.pdf \
+  --output backend/app/storage/outputs/output_layout.docx \
+  --mode layout
+```
 
-    pdf_to_word_no_ocr(
-        "app/storage/uploads/input.pdf",
-        "app/storage/outputs/output.docx",
-        mode="semantic"  # or "form"
-    )
+### Form mode
+```bash
+python -m backend.app.cli \
+  --input backend/app/storage/uploads/input.pdf \
+  --output backend/app/storage/outputs/output_form.docx \
+  --mode form
+```
+
+> **Windows PowerShell note:** Run commands on a single line or use the PowerShell line-continuation character ` instead of \.
 
 ---
 
-## 🚀 Future Work
+## 🚀 Future Work (Optional)
 
-**Planned (optional):**
 * Inline label–value detection
-* Multi-pair row splitting
-* Auto-detection of semantic vs form mode
+* Multi-pair row handling
+* Automatic mode selection
 * FastAPI backend
-* OCR as an optional stage
+* OCR as an explicit, optional stage
 
 ---
 
@@ -168,13 +209,14 @@ Update input/output paths inside the file:
 
 This project demonstrates:
 * Understanding of PDF internals
+* Geometry-based document analysis
 * Safe heuristic design
-* Mode-based processing
-* Real-world document engineering tradeoffs
+* Mode-based system architecture
+* Real-world engineering trade-offs
 
-It is designed to be **explainable, extensible, and honest**.
+It is designed to be **honest, extensible, and explainable**.
 
 ---
 
 ## 📌 Version
-**v1.0 — Frozen**
+**v1.1 — Stable**
