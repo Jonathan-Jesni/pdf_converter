@@ -1,6 +1,7 @@
 import pdfplumber
 from docx import Document
 from .layout import pdf_to_word_layout
+from backend.app.core.auto_mode import detect_mode
 import io
 import os
 
@@ -98,8 +99,12 @@ def pair_form_rows(left_lines, right_lines):
     return pairs
 
 
-def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
-    # 🔹 LAYOUT MODE DISPATCH
+def pdf_to_word_no_ocr(
+    input_pdf_path,
+    output_docx_path,
+    mode="semantic",
+    report_path=None
+):
     if mode == "layout":
         pdf_to_word_layout(input_pdf_path, output_docx_path)
         return
@@ -107,9 +112,29 @@ def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
     doc = Document()
     os.makedirs(os.path.dirname(output_docx_path), exist_ok=True)
 
+    decision_log = []
+
     with pdfplumber.open(input_pdf_path) as pdf:
         for page in pdf.pages:
             words = page.extract_words(use_text_flow=True)
+
+            page_mode = mode
+            reason = None
+
+            if mode == "auto":
+                blocks = [
+                    (w["x0"], w["top"], w["x1"], w["bottom"], w["text"])
+                    for w in words
+                    if "x0" in w and "x1" in w and "top" in w and "bottom" in w
+                ]
+
+                page_mode, reason = detect_mode(blocks, page.width)
+
+                decision_log.append({
+                    "page": page.page_number,
+                    "mode": page_mode,
+                    "reason": reason
+                })
 
             if not words or not is_meaningful_text(words):
                 img = page.to_image(resolution=300).original
@@ -120,7 +145,7 @@ def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
                 doc.add_page_break()
                 continue
 
-            if mode == "form":
+            if page_mode == "form":
                 columns = split_into_columns(words)
                 if len(columns) == 2:
                     left_lines = extract_lines(columns[0])
@@ -135,7 +160,6 @@ def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
                     doc.add_page_break()
                     continue
 
-            # SEMANTIC MODE
             font_sizes = [w["size"] for w in words if "size" in w]
             avg_size = sum(font_sizes) / len(font_sizes) if font_sizes else 10
 
@@ -174,13 +198,9 @@ def pdf_to_word_no_ocr(input_pdf_path, output_docx_path, mode="semantic"):
 
             doc.add_page_break()
 
+    if report_path and decision_log:
+        import json
+        with open(report_path, "w") as f:
+            json.dump(decision_log, f, indent=2)
+
     doc.save(output_docx_path)
-
-
-if __name__ == "__main__":
-    pdf_to_word_no_ocr(
-        "backend/app/storage/uploads/input.pdf",
-        "backend/app/storage/outputs/output_layout.docx",
-        mode="layout"
-    )
-    print("Layout mode test finished")

@@ -23,9 +23,14 @@ def main():
 
     parser.add_argument(
         "--mode",
-        choices=["semantic", "layout", "form"],
+        choices=["semantic", "layout", "form", "auto"],
         default="semantic",
         help="Conversion mode (default: semantic)"
+    )
+
+    parser.add_argument(
+        "--report",
+        help="Path to JSON report file (optional)"
     )
 
     args = parser.parse_args()
@@ -33,6 +38,7 @@ def main():
     input_path = args.input
     output_path = args.output
     mode = args.mode
+    report_path = args.report
 
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Input file not found: {input_path}")
@@ -42,11 +48,15 @@ def main():
     pdf_to_word_no_ocr(
         input_pdf_path=input_path,
         output_docx_path=output_path,
-        mode=mode
+        mode=mode,
+        report_path=report_path
     )
 
     print(f"✅ Conversion finished ({mode} mode)")
     print(f"📄 Output saved to: {output_path}")
+
+    if report_path:
+        print(f"🧠 Decision report saved to: {report_path}")
 
 
 if __name__ == "__main__":
