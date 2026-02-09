@@ -4,28 +4,35 @@ import os
 from backend.app.converters.pdf_to_word.no_ocr import pdf_to_word_no_ocr
 
 
+def parse_pages(pages_str):
+    if pages_str == "all":
+        return None
+
+    pages = set()
+
+    for part in pages_str.split(","):
+        part = part.strip()
+        if "-" in part:
+            start, end = part.split("-")
+            pages.update(range(int(start), int(end) + 1))
+        else:
+            pages.add(int(part))
+
+    return pages
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="PDF to Word Converter (No OCR)"
     )
 
-    parser.add_argument(
-        "--input",
-        required=True,
-        help="Path to input PDF file"
-    )
-
-    parser.add_argument(
-        "--output",
-        required=True,
-        help="Path to output DOCX file"
-    )
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=True)
 
     parser.add_argument(
         "--mode",
         choices=["semantic", "layout", "form", "auto"],
-        default="semantic",
-        help="Conversion mode (default: semantic)"
+        default="semantic"
     )
 
     parser.add_argument(
@@ -33,30 +40,36 @@ def main():
         help="Path to JSON report file (optional)"
     )
 
-    args = parser.parse_args()
-
-    input_path = args.input
-    output_path = args.output
-    mode = args.mode
-    report_path = args.report
-
-    if not os.path.exists(input_path):
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-    pdf_to_word_no_ocr(
-        input_pdf_path=input_path,
-        output_docx_path=output_path,
-        mode=mode,
-        report_path=report_path
+    parser.add_argument(
+        "--pages",
+        default="all",
+        help="Pages to process (e.g. 1-3, 2,5,7, all)"
     )
 
-    print(f"✅ Conversion finished ({mode} mode)")
-    print(f"📄 Output saved to: {output_path}")
+    args = parser.parse_args()
 
-    if report_path:
-        print(f"🧠 Decision report saved to: {report_path}")
+    if not os.path.exists(args.input):
+        raise FileNotFoundError(f"Input file not found: {args.input}")
+
+    output_dir = os.path.dirname(args.output)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    pages = parse_pages(args.pages)
+
+    pdf_to_word_no_ocr(
+        input_pdf_path=args.input,
+        output_docx_path=args.output,
+        mode=args.mode,
+        report_path=args.report,
+        pages=pages
+    )
+
+    print(f"✅ Conversion finished ({args.mode} mode)")
+    print(f"📄 Output saved to: {args.output}")
+
+    if args.report:
+        print(f"🧠 Decision report saved to: {args.report}")
 
 
 if __name__ == "__main__":

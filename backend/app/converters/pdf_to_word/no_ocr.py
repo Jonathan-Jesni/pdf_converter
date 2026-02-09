@@ -103,25 +103,31 @@ def pdf_to_word_no_ocr(
     input_pdf_path,
     output_docx_path,
     mode="semantic",
-    report_path=None
+    report_path=None,
+    pages=None
 ):
     if mode == "layout":
         pdf_to_word_layout(input_pdf_path, output_docx_path)
         return
 
     doc = Document()
-    os.makedirs(os.path.dirname(output_docx_path), exist_ok=True)
+    output_dir = os.path.dirname(output_docx_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
 
     decision_log = []
 
     with pdfplumber.open(input_pdf_path) as pdf:
-        for page in pdf.pages:
+        for idx, page in enumerate(pdf.pages, start=1):
+            if pages is not None and idx not in pages:
+                continue
+
             words = page.extract_words(use_text_flow=True)
 
             page_mode = mode
             reason = None
 
-            if mode == "auto":
+            if page_mode == "auto":
                 blocks = [
                     (w["x0"], w["top"], w["x1"], w["bottom"], w["text"])
                     for w in words
@@ -131,7 +137,7 @@ def pdf_to_word_no_ocr(
                 page_mode, reason = detect_mode(blocks, page.width)
 
                 decision_log.append({
-                    "page": page.page_number,
+                    "page": idx,
                     "mode": page_mode,
                     "reason": reason
                 })
