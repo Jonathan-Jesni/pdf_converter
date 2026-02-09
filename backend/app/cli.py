@@ -65,7 +65,10 @@ def main():
         pages=pages
     )
 
-    print(f"✅ Conversion finished ({args.mode} mode)")
+    if args.mode == "auto":
+        print("✅ Conversion finished (auto-detected mode)")
+    else:
+        print(f"✅ Conversion finished (forced {args.mode} mode)")
     print(f"📄 Output saved to: {args.output}")
 
     if args.report:

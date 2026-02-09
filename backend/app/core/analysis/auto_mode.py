@@ -1,6 +1,19 @@
-def detect_mode(text_blocks, page_width):
+def detect_mode(profile, page_width):
+    words = profile.words
+
+    if not words:
+        profile.reason = "no text blocks detected"
+        return
+
+    text_blocks = [
+        (w["x0"], w["top"], w["x1"], w["bottom"])
+        for w in words
+        if "x0" in w and "x1" in w and "top" in w and "bottom" in w
+    ]
+
     if not text_blocks:
-        return "semantic", "no text blocks detected"
+        profile.reason = "no usable text geometry"
+        return
 
     x0_norm = [b[0] / page_width for b in text_blocks]
     x1_norm = [b[2] / page_width for b in text_blocks]
@@ -20,6 +33,9 @@ def detect_mode(text_blocks, page_width):
     clusters.append(current)
     column_count = sum(1 for c in clusters if len(c) >= 2)
 
+    if column_count >= 2:
+        profile.columns = column_count
+
     # ---- Form alignment detection ----
     left_freq = {}
     right_freq = {}
@@ -33,12 +49,13 @@ def detect_mode(text_blocks, page_width):
     max_left = max(left_freq.values(), default=0)
     max_right = max(right_freq.values(), default=0)
 
-    form_detected = max_left >= 4 and max_right >= 4
+    if max_left >= 4 and max_right >= 4:
+        profile.has_form_alignment = True
+        profile.reason = "consistent left-right alignment detected"
+        return
 
-    # ---- Decision ----
-    if form_detected:
-        return "form", "consistent left-right alignment detected"
-    elif column_count >= 2:
-        return "layout", f"{column_count} distinct columns detected"
-    else:
-        return "semantic", "single continuous text flow"
+    if column_count >= 2:
+        profile.reason = f"{column_count} distinct columns detected"
+        return
+
+    profile.reason = "single continuous text flow"

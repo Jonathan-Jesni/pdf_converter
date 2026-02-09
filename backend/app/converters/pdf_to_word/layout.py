@@ -72,6 +72,7 @@ def render_column(doc, words):
 
         doc.add_paragraph("\t" * indent + text)
 
+
 def extract_page_images(page):
     images = []
 
@@ -94,6 +95,20 @@ def extract_page_images(page):
     return images
 
 
+# ✅ NEW: v2.0 renderer (used by no_ocr.py)
+def render_layout(profile, doc):
+    words = profile.words
+
+    if not words or not is_meaningful_text(words):
+        return
+
+    columns = split_into_columns(words)
+
+    for col_words in columns:
+        render_column(doc, col_words)
+
+
+# ⛔ Legacy standalone pipeline (kept for backward compatibility)
 def pdf_to_word_layout(input_pdf_path, output_docx_path):
     doc = Document()
     os.makedirs(os.path.dirname(output_docx_path), exist_ok=True)
@@ -102,7 +117,6 @@ def pdf_to_word_layout(input_pdf_path, output_docx_path):
         for page in pdf.pages:
             words = page.extract_words(use_text_flow=True)
 
-            # Scanned / image-only fallback
             if not words or not is_meaningful_text(words):
                 img = page.to_image(resolution=300).original
                 buf = io.BytesIO()
@@ -113,17 +127,14 @@ def pdf_to_word_layout(input_pdf_path, output_docx_path):
                 continue
 
             columns = split_into_columns(words)
-
             for col_words in columns:
                 render_column(doc, col_words)
 
-            # ADD embedded images AFTER text
             images = extract_page_images(page)
             for img_buf in images:
                 add_full_width_image(doc, img_buf)
 
             doc.add_page_break()
-
 
     doc.save(output_docx_path)
 

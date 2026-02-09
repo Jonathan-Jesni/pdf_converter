@@ -1,7 +1,7 @@
 import pdfplumber
 from docx import Document
-from .layout import pdf_to_word_layout
-from backend.app.core.auto_mode import detect_mode
+from .layout import pdf_to_word_layout, render_layout
+from backend.app.core.analysis.build_profile import build_page_profile
 import io
 import os
 
@@ -118,30 +118,40 @@ def pdf_to_word_no_ocr(
     decision_log = []
 
     with pdfplumber.open(input_pdf_path) as pdf:
-        for idx, page in enumerate(pdf.pages, start=1):
-            if pages is not None and idx not in pages:
-                continue
 
+        # -------- COLLECT PAGES --------
+        page_items = [
+            (idx, page)
+            for idx, page in enumerate(pdf.pages, start=1)
+            if pages is None or idx in pages
+        ]
+
+        # -------- PASS 1: ANALYSIS --------
+        profiles = []
+        for idx, page in page_items:
             words = page.extract_words(use_text_flow=True)
 
-            page_mode = mode
-            reason = None
+            profile = build_page_profile(
+                page_number=idx,
+                words=words,
+                images=[]
+            )
 
-            if page_mode == "auto":
-                blocks = [
-                    (w["x0"], w["top"], w["x1"], w["bottom"], w["text"])
-                    for w in words
-                    if "x0" in w and "x1" in w and "top" in w and "bottom" in w
-                ]
+            profiles.append(profile)
 
-                page_mode, reason = detect_mode(blocks, page.width)
+        # -------- PASS 2: RENDER --------
+        for profile in profiles:
+            page = pdf.pages[profile.page_number - 1]
+            words = profile.words
+            page_mode = profile.detected_mode
 
-                decision_log.append({
-                    "page": idx,
-                    "mode": page_mode,
-                    "reason": reason
-                })
+            decision_log.append({
+                "page": profile.page_number,
+                "mode": page_mode,
+                "reason": profile.reason
+            })
 
+            # ---- Image-only fallback ----
             if not words or not is_meaningful_text(words):
                 img = page.to_image(resolution=300).original
                 buf = io.BytesIO()
@@ -151,6 +161,13 @@ def pdf_to_word_no_ocr(
                 doc.add_page_break()
                 continue
 
+            # ---- Layout rendering ----
+            if page_mode == "layout":
+                render_layout(profile, doc)
+                doc.add_page_break()
+                continue
+
+            # ---- Form rendering ----
             if page_mode == "form":
                 columns = split_into_columns(words)
                 if len(columns) == 2:
@@ -166,6 +183,7 @@ def pdf_to_word_no_ocr(
                     doc.add_page_break()
                     continue
 
+            # ---- Semantic rendering ----
             font_sizes = [w["size"] for w in words if "size" in w]
             avg_size = sum(font_sizes) / len(font_sizes) if font_sizes else 10
 
