@@ -3,6 +3,7 @@ from .detect_columns import detect_columns
 from .paragraph_merge import merge_lines_into_paragraphs
 from .detect_lists import detect_lists
 from .detect_headings import detect_headings
+from .detect_tables import detect_tables
 
 
 def build_page_profile(page_number, words, images):
@@ -39,5 +40,6 @@ def build_page_profile(page_number, words, images):
             word_sizes
         )
 
+    detect_tables(profile)
     profile.decide_mode()
     return profile

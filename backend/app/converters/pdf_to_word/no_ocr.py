@@ -161,6 +161,21 @@ def pdf_to_word_no_ocr(
                 doc.add_page_break()
                 continue
 
+            # ---- Table rendering ----
+            if page_mode == "table":
+                table = doc.add_table(
+                    rows=len(profile.table_cells),
+                    cols=len(profile.table_cells[0])
+                )
+
+                for i, row in enumerate(profile.table_cells):
+                    for j, cell in enumerate(row):
+                        table.cell(i, j).text = cell
+
+                doc.add_page_break()
+                continue
+
+
             # ---- Layout rendering ----
             if page_mode == "layout":
                 render_layout(profile, doc)
@@ -183,41 +198,20 @@ def pdf_to_word_no_ocr(
                     doc.add_page_break()
                     continue
 
-            # ---- Semantic rendering ----
-            font_sizes = [w["size"] for w in words if "size" in w]
-            avg_size = sum(font_sizes) / len(font_sizes) if font_sizes else 10
+            # ---- Structured semantic rendering ----
 
-            lines = group_words_into_lines(words)
-            paragraphs = []
-            current = []
-            last_top = None
+            # Render headings
+            for heading in getattr(profile, "headings", []):
+                doc.add_heading(heading, level=1)
 
-            for line in lines:
-                top = line[0]["top"]
-                if last_top and abs(top - last_top) > PARAGRAPH_Y_GAP:
-                    paragraphs.append(current)
-                    current = []
-                current.append(line)
-                last_top = top
+            # Render lists
+            for lst in getattr(profile, "lists", []):
+                for item in lst:
+                    doc.add_paragraph(item, style="List Bullet")
 
-            if current:
-                paragraphs.append(current)
-
-            for para in paragraphs:
-                text = " ".join(
-                    " ".join(w["text"] for w in line) for line in para
-                ).strip()
-
-                if not text:
-                    continue
-
-                mean_size = sum(
-                    w["size"] for line in para for w in line if "size" in w
-                ) / max(1, sum(1 for line in para for w in line if "size" in w))
-
-                if mean_size > avg_size * HEADING_SCALE:
-                    doc.add_heading(text, level=1)
-                else:
+            # Render paragraphs
+            for text in getattr(profile, "paragraphs", []):
+                if text:
                     doc.add_paragraph(text)
 
             doc.add_page_break()

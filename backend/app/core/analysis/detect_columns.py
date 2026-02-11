@@ -10,3 +10,4 @@ def detect_columns(words):
         return 2, [(0, mid), (mid, max(x_positions))]
 
     return 1, [(min(x_positions), max(x_positions))]
+    
