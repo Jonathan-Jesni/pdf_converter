@@ -99,16 +99,89 @@ def pair_form_rows(left_lines, right_lines):
     return pairs
 
 
+def render_profiles_to_doc(doc, pdf, profiles, decision_log):
+    for profile in profiles:
+        page = pdf.pages[profile.page_number - 1]
+        words = profile.words
+        page_mode = profile.detected_mode
+
+        decision_log.append({
+            "page": profile.page_number,
+            "mode": page_mode,
+            "reason": profile.reason
+        })
+
+        # ---- Image-only fallback ----
+        if not words or not is_meaningful_text(words):
+            img = page.to_image(resolution=300).original
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            add_full_width_image(doc, buf)
+            doc.add_page_break()
+            continue
+
+        # ---- Table rendering ----
+        if page_mode == "table":
+            table = doc.add_table(
+                rows=len(profile.table_cells),
+                cols=len(profile.table_cells[0])
+            )
+
+            for i, row in enumerate(profile.table_cells):
+                for j, cell in enumerate(row):
+                    table.cell(i, j).text = cell
+
+            doc.add_page_break()
+            continue
+
+
+        # ---- Layout rendering ----
+        if page_mode == "layout":
+            render_layout(profile, doc)
+            doc.add_page_break()
+            continue
+
+        # ---- Form rendering ----
+        if page_mode == "form":
+            columns = split_into_columns(words)
+            if len(columns) == 2:
+                left_lines = extract_lines(columns[0])
+                right_lines = extract_lines(columns[1])
+                pairs = pair_form_rows(left_lines, right_lines)
+
+                table = doc.add_table(rows=len(pairs), cols=2)
+                for i, (l, r) in enumerate(pairs):
+                    table.cell(i, 0).text = l
+                    table.cell(i, 1).text = r
+
+                doc.add_page_break()
+                continue
+
+        # ---- Structured semantic rendering ----
+
+        # Render headings
+        for heading in getattr(profile, "headings", []):
+            doc.add_heading(heading, level=1)
+
+        # Render lists
+        for lst in getattr(profile, "lists", []):
+            for item in lst:
+                doc.add_paragraph(item, style="List Bullet")
+
+        # Render paragraphs
+        for text in getattr(profile, "paragraphs", []):
+            if text:
+                doc.add_paragraph(text)
+
+        doc.add_page_break()
+
 def pdf_to_word_no_ocr(
     input_pdf_path,
     output_docx_path,
-    mode="semantic",
     report_path=None,
     pages=None
 ):
-    if mode == "layout":
-        pdf_to_word_layout(input_pdf_path, output_docx_path)
-        return
 
     doc = Document()
     output_dir = os.path.dirname(output_docx_path)
@@ -140,81 +213,7 @@ def pdf_to_word_no_ocr(
             profiles.append(profile)
 
         # -------- PASS 2: RENDER --------
-        for profile in profiles:
-            page = pdf.pages[profile.page_number - 1]
-            words = profile.words
-            page_mode = profile.detected_mode
-
-            decision_log.append({
-                "page": profile.page_number,
-                "mode": page_mode,
-                "reason": profile.reason
-            })
-
-            # ---- Image-only fallback ----
-            if not words or not is_meaningful_text(words):
-                img = page.to_image(resolution=300).original
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                buf.seek(0)
-                add_full_width_image(doc, buf)
-                doc.add_page_break()
-                continue
-
-            # ---- Table rendering ----
-            if page_mode == "table":
-                table = doc.add_table(
-                    rows=len(profile.table_cells),
-                    cols=len(profile.table_cells[0])
-                )
-
-                for i, row in enumerate(profile.table_cells):
-                    for j, cell in enumerate(row):
-                        table.cell(i, j).text = cell
-
-                doc.add_page_break()
-                continue
-
-
-            # ---- Layout rendering ----
-            if page_mode == "layout":
-                render_layout(profile, doc)
-                doc.add_page_break()
-                continue
-
-            # ---- Form rendering ----
-            if page_mode == "form":
-                columns = split_into_columns(words)
-                if len(columns) == 2:
-                    left_lines = extract_lines(columns[0])
-                    right_lines = extract_lines(columns[1])
-                    pairs = pair_form_rows(left_lines, right_lines)
-
-                    table = doc.add_table(rows=len(pairs), cols=2)
-                    for i, (l, r) in enumerate(pairs):
-                        table.cell(i, 0).text = l
-                        table.cell(i, 1).text = r
-
-                    doc.add_page_break()
-                    continue
-
-            # ---- Structured semantic rendering ----
-
-            # Render headings
-            for heading in getattr(profile, "headings", []):
-                doc.add_heading(heading, level=1)
-
-            # Render lists
-            for lst in getattr(profile, "lists", []):
-                for item in lst:
-                    doc.add_paragraph(item, style="List Bullet")
-
-            # Render paragraphs
-            for text in getattr(profile, "paragraphs", []):
-                if text:
-                    doc.add_paragraph(text)
-
-            doc.add_page_break()
+        render_profiles_to_doc(doc, pdf, profiles, decision_log)
 
     if report_path and decision_log:
         import json

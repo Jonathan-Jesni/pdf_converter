@@ -30,12 +30,6 @@ def main():
     parser.add_argument("--output", required=True)
 
     parser.add_argument(
-        "--mode",
-        choices=["semantic", "layout", "form", "auto"],
-        default="semantic"
-    )
-
-    parser.add_argument(
         "--report",
         help="Path to JSON report file (optional)"
     )
@@ -60,15 +54,11 @@ def main():
     pdf_to_word_no_ocr(
         input_pdf_path=args.input,
         output_docx_path=args.output,
-        mode=args.mode,
         report_path=args.report,
         pages=pages
     )
 
-    if args.mode == "auto":
-        print("✅ Conversion finished (auto-detected mode)")
-    else:
-        print(f"✅ Conversion finished (forced {args.mode} mode)")
+    print("✅ Conversion finished")
     print(f"📄 Output saved to: {args.output}")
 
     if args.report:

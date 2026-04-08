@@ -1,3 +1,9 @@
 pdfplumber
 python-docx
 Pillow
+fastapi
+uvicorn
+python-multipart
+pytest
+httpx
+# pytesseract  # Optional dependency

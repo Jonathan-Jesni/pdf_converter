@@ -108,8 +108,16 @@ def render_layout(profile, doc):
         render_column(doc, col_words)
 
 
+import warnings
+
 # ⛔ Legacy standalone pipeline (kept for backward compatibility)
 def pdf_to_word_layout(input_pdf_path, output_docx_path):
+    warnings.warn(
+        "pdf_to_word_layout is deprecated and will be removed. "
+        "The layout bypass is deprecated. Please route all documents through the single PageProfile pipeline.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     doc = Document()
     os.makedirs(os.path.dirname(output_docx_path), exist_ok=True)
 
@@ -138,10 +146,3 @@ def pdf_to_word_layout(input_pdf_path, output_docx_path):
 
     doc.save(output_docx_path)
 
-
-if __name__ == "__main__":
-    pdf_to_word_layout(
-        "app/storage/uploads/input.pdf",
-        "app/storage/outputs/output_layout.docx"
-    )
-    print("Layout mode conversion finished")
