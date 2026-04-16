@@ -19,10 +19,17 @@ def build_page_profile(page_number, words, images):
         sizes = [w["size"] for w in words if "size" in w]
         profile.avg_font_size = sum(sizes) / len(sizes) if sizes else 0.0
 
+        from collections import defaultdict
+
+        line_map = defaultdict(list)
+
+        for w in words:
+            if "top" in w and "text" in w:
+                line_map[round(w["top"] / 10) * 10].append(w["text"])
+
         lines = [
-            (w["top"], w["text"])
-            for w in words
-            if "top" in w and "text" in w
+            (top, " ".join(texts))
+            for top, texts in sorted(line_map.items())
         ]
 
         profile.paragraphs = merge_lines_into_paragraphs(lines)

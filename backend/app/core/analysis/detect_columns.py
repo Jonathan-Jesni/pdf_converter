@@ -19,9 +19,9 @@ def detect_columns(words):
         return 1, []
 
     # --- Tunables ---
-    GAP_THRESHOLD = 50      # minimum gap (pts) to consider a column separator
-    MIN_WORDS_PER_COL = 12  # each column must have at least this many words
-    MIN_COL_WIDTH = 80      # right column must span at least this many pts
+    GAP_THRESHOLD = 35      # minimum gap (pts) to consider a column separator
+    MIN_WORDS_PER_COL = 8   # each column must have at least this many words
+    MIN_COL_WIDTH = 60      # right column must span at least this many pts
 
     x_positions = sorted(w["x0"] for w in words)
 

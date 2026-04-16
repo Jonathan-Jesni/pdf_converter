@@ -102,10 +102,19 @@ def render_layout(profile, doc):
     if not words or not is_meaningful_text(words):
         return
 
-    columns = split_into_columns(words)
+    if profile.columns == 2 and len(profile.column_x_ranges) == 2:
+        _, right_range = profile.column_x_ranges
+        left_words = [w for w in words if w["x0"] < right_range[0]]
+        right_words = [w for w in words if w["x0"] >= right_range[0]]
+        left_words = sorted(left_words, key=lambda w: (w["top"], w["x0"]))
+        right_words = sorted(right_words, key=lambda w: (w["top"], w["x0"]))
+        columns = [left_words, right_words]
+    else:
+        columns = [words]
 
     for col_words in columns:
-        render_column(doc, col_words)
+        if col_words:
+            render_column(doc, col_words)
 
 
 import warnings

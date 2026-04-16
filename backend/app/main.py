@@ -1,13 +1,28 @@
 import os
 import tempfile
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import traceback
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from backend.app.converters.pdf_to_word.no_ocr import pdf_to_word_no_ocr
 from backend.app.converters.pdf_to_word.ocr import HAS_OCR, pdf_to_word_ocr
 
-app = FastAPI(title="PDF to Word Converter API", description="Minimal file-based converter")
+app = FastAPI(
+    title="PDF to Word Converter API",
+    description="Minimal file-based converter",
+    debug=True,
+)
+
+
+@app.middleware("http")
+async def catch_exceptions(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        print("\n=== GLOBAL ERROR ===")
+        traceback.print_exc()
+        raise
 
 def cleanup_files(files):
     for f in files:
@@ -37,10 +52,15 @@ async def convert_pdf(file: UploadFile = File(...), use_ocr: bool = Form(False))
         with open(in_path, "wb") as f:
             f.write(content)
             
-        if use_ocr:
-            pdf_to_word_ocr(in_path, out_path)
-        else:
-            pdf_to_word_no_ocr(in_path, out_path)
+        try:
+            if use_ocr:
+                pdf_to_word_ocr(in_path, out_path)
+            else:
+                pdf_to_word_no_ocr(in_path, out_path)
+        except Exception:
+            print("\n=== CONVERSION ERROR ===")
+            traceback.print_exc()
+            raise
             
         out_filename = file.filename.rsplit(".", 1)[0] + ".docx"
         
@@ -51,4 +71,4 @@ async def convert_pdf(file: UploadFile = File(...), use_ocr: bool = Form(False))
         )
     except Exception as e:
         cleanup_files([in_path, out_path])
-        raise HTTPException(status_code=500, detail=str(e))
+        raise

@@ -3,6 +3,8 @@ import io
 import pdfplumber
 from docx import Document
 
+print("🚨 OCR FILE LOADED 🚨")
+
 try:
     import pytesseract
     HAS_OCR = True
@@ -38,7 +40,8 @@ def extract_words_ocr(page_image):
                 "x0": left,
                 "top": top,
                 "x1": left + width,
-                "bottom": top + height
+                "bottom": top + height,
+                "size": height,
             })
             
     return words
@@ -52,7 +55,7 @@ def extract_words_ocr(page_image):
 _LINE_Y_THRESHOLD = 8
 
 # Minimum token length to keep (filters single-char OCR noise).
-_MIN_TOKEN_LEN = 2
+_MIN_TOKEN_LEN = 1
 
 
 def _clean_ocr_words(words):
@@ -105,12 +108,19 @@ def _group_into_lines(words):
         text = " ".join(w["text"] for w in line_sorted)
         if not text.strip():
             continue
+        sized_words = [w for w in line_sorted if "size" in w]
+        average_size = (
+            sum(w["size"] for w in sized_words) / len(line_sorted)
+            if sized_words
+            else 10
+        )
         merged.append({
             "text": text,
             "x0": min(w["x0"] for w in line_sorted),
             "x1": max(w["x1"] for w in line_sorted),
             "top": line_sorted[0]["top"],
             "bottom": max(w["bottom"] for w in line_sorted),
+            "size": average_size,
         })
 
     return merged
@@ -127,13 +137,12 @@ def _sort_and_clean_ocr_output(raw_words):
     # 2. Strip noise
     cleaned = _clean_ocr_words(sorted_words)
 
-    # 3. Group into lines and return individual words (not merged)
-    #    We keep individual words so column detection still works.
+    # 3. Group into lines for downstream profile analysis
     if not cleaned:
         return []
 
-    # Re-sort after cleaning (already sorted, but defensive)
-    return sorted(cleaned, key=lambda w: (w["top"], w["x0"]))
+    grouped = _group_into_lines(cleaned)
+    return grouped
 
 
 def pdf_to_word_ocr(
@@ -146,6 +155,8 @@ def pdf_to_word_ocr(
     End-to-end PDF to Word converter using OCR for text extraction.
     Reuses the exact same layout analysis and rendering logic as no_ocr.py.
     """
+    print("🚨 OCR FUNCTION CALLED 🚨")
+
     if not HAS_OCR:
         raise RuntimeError("pytesseract is not installed. Please install it to use OCR mode, or use no-OCR mode instead.")
 
@@ -165,29 +176,52 @@ def pdf_to_word_ocr(
         ]
 
         # -------- PASS 1: ANALYSIS (WITH OCR) --------
+        import traceback
+
         profiles = []
         for idx, page in page_items:
-            # Render page to image at 300 DPI for OCR
-            # Note: Tesseract performs better with higher resolution
-            img = page.to_image(resolution=300).original
-            
-            # Extract words using OCR
-            raw_ocr_words = extract_words_ocr(img)
+            print(f"🚨 PROCESSING PAGE {idx} 🚨")
+            try:
+                img = page.to_image(resolution=300).original
+                raw_ocr_words = extract_words_ocr(img)
+                ocr_words = _sort_and_clean_ocr_output(raw_ocr_words)
 
-            # Clean and sort OCR output before analysis
-            ocr_words = _sort_and_clean_ocr_output(raw_ocr_words)
+                print(f"[OCR DEBUG] Page {idx}: {len(ocr_words)} words")
 
-            # Build profile EXACTLY as we do in no_ocr, but with OCR words
-            profile = build_page_profile(
-                page_number=idx,
-                words=ocr_words,
-                images=[]
-            )
+                if ocr_words:
+                    print("SAMPLE WORD:", ocr_words[0])
 
-            profiles.append(profile)
+                safe_words = []
+
+                for w in ocr_words:
+                    try:
+                        safe_words.append({
+                            "text": str(w.get("text", "")),
+                            "x0": float(w.get("x0", 0)),
+                            "x1": float(w.get("x1", 0)),
+                            "top": float(w.get("top", 0)),
+                            "bottom": float(w.get("bottom", 0)),
+                            "size": float(w.get("size", 10)),
+                        })
+                    except Exception:
+                        continue
+
+                print("SAFE WORD SAMPLE:", safe_words[:3])
+
+                profile = build_page_profile(
+                    page_number=idx,
+                    words=safe_words,
+                    images=[]
+                )
+
+                profiles.append(profile)
+
+            except Exception as e:
+                print(f"[OCR CRASH] Page {idx}")
+                traceback.print_exc()
+                raise e
 
         # -------- PASS 2: RENDER --------
-        # Reuse identical rendering pipeline
         render_profiles_to_doc(doc, pdf, profiles, decision_log)
 
     if report_path and decision_log:
