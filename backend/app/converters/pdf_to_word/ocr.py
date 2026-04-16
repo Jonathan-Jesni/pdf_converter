@@ -1,5 +1,6 @@
 import os
 import io
+import traceback
 import pdfplumber
 from docx import Document
 
@@ -8,6 +9,11 @@ print("🚨 OCR FILE LOADED 🚨")
 try:
     import pytesseract
     HAS_OCR = True
+    
+    # ⚠️ ANTIGRAVITY FIX: Set Windows path for Tesseract executable
+    # Change this path if you installed Tesseract somewhere else
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    
 except ImportError:
     HAS_OCR = False
 
@@ -28,8 +34,6 @@ def extract_words_ocr(page_image):
     for i in range(len(data['text'])):
         text = data['text'][i].strip()
         if text:
-            # Map coordinates to pdfplumber format
-            # pdfplumber format: {"text": "...", "x0": left, "top": top, "x1": right, "bottom": bottom}
             left = data['left'][i]
             top = data['top'][i]
             width = data['width'][i]
@@ -46,43 +50,26 @@ def extract_words_ocr(page_image):
             
     return words
 
-
 # ---------------------------------------------------------------------------
 # OCR post-processing helpers
 # ---------------------------------------------------------------------------
 
-# Threshold (in pts / pixels) for grouping words onto the same line.
 _LINE_Y_THRESHOLD = 8
-
-# Minimum token length to keep (filters single-char OCR noise).
 _MIN_TOKEN_LEN = 1
 
-
 def _clean_ocr_words(words):
-    """
-    Remove obvious OCR noise:
-      - empty or whitespace-only tokens
-      - very short tokens likely to be artifacts (single chars)
-    """
     cleaned = []
     for w in words:
         text = w["text"].strip()
         if not text:
             continue
         if len(text) < _MIN_TOKEN_LEN:
-            # Keep single chars only if they are common standalone characters
             if text not in ("I", "A", "a", "&", "-", "–", "—"):
                 continue
         cleaned.append({**w, "text": text})
     return cleaned
 
-
 def _group_into_lines(words):
-    """
-    Group words into lines based on vertical proximity, then merge each
-    line into a single synthetic word spanning the full line width.
-    This produces cleaner, better-ordered input for downstream analysis.
-    """
     if not words:
         return []
 
@@ -101,7 +88,6 @@ def _group_into_lines(words):
     if current_line:
         lines.append(current_line)
 
-    # Merge each line into a single word dict (preserves pdfplumber format)
     merged = []
     for line in lines:
         line_sorted = sorted(line, key=lambda w: w["x0"])
@@ -125,25 +111,13 @@ def _group_into_lines(words):
 
     return merged
 
-
 def _sort_and_clean_ocr_output(raw_words):
-    """
-    Orchestrator: sort → clean → group OCR words into well-ordered lines.
-    Returns a list of word dicts in correct reading order.
-    """
-    # 1. Sort by reading order (top → left)
     sorted_words = sorted(raw_words, key=lambda w: (w["top"], w["x0"]))
-
-    # 2. Strip noise
     cleaned = _clean_ocr_words(sorted_words)
-
-    # 3. Group into lines for downstream profile analysis
     if not cleaned:
         return []
-
     grouped = _group_into_lines(cleaned)
     return grouped
-
 
 def pdf_to_word_ocr(
     input_pdf_path,
@@ -151,10 +125,6 @@ def pdf_to_word_ocr(
     report_path=None,
     pages=None
 ):
-    """
-    End-to-end PDF to Word converter using OCR for text extraction.
-    Reuses the exact same layout analysis and rendering logic as no_ocr.py.
-    """
     print("🚨 OCR FUNCTION CALLED 🚨")
 
     if not HAS_OCR:
@@ -168,15 +138,11 @@ def pdf_to_word_ocr(
     decision_log = []
 
     with pdfplumber.open(input_pdf_path) as pdf:
-        # -------- COLLECT PAGES --------
         page_items = [
             (idx, page)
             for idx, page in enumerate(pdf.pages, start=1)
             if pages is None or idx in pages
         ]
-
-        # -------- PASS 1: ANALYSIS (WITH OCR) --------
-        import traceback
 
         profiles = []
         for idx, page in page_items:
@@ -186,13 +152,7 @@ def pdf_to_word_ocr(
                 raw_ocr_words = extract_words_ocr(img)
                 ocr_words = _sort_and_clean_ocr_output(raw_ocr_words)
 
-                print(f"[OCR DEBUG] Page {idx}: {len(ocr_words)} words")
-
-                if ocr_words:
-                    print("SAMPLE WORD:", ocr_words[0])
-
                 safe_words = []
-
                 for w in ocr_words:
                     try:
                         safe_words.append({
@@ -206,22 +166,22 @@ def pdf_to_word_ocr(
                     except Exception:
                         continue
 
-                print("SAFE WORD SAMPLE:", safe_words[:3])
-
                 profile = build_page_profile(
                     page_number=idx,
                     words=safe_words,
                     images=[]
                 )
-
                 profiles.append(profile)
 
             except Exception as e:
-                print(f"[OCR CRASH] Page {idx}")
+                # ⚠️ ANTIGRAVITY FIX: Catch the error and use image fallback instead of crashing!
+                print(f"[OCR CRASH CAUGHT] Page {idx}: {e}")
                 traceback.print_exc()
-                raise e
+                
+                # Create an empty profile to trigger the full-width image fallback
+                profile = build_page_profile(page_number=idx, words=[], images=[])
+                profiles.append(profile)
 
-        # -------- PASS 2: RENDER --------
         render_profiles_to_doc(doc, pdf, profiles, decision_log)
 
     if report_path and decision_log:
